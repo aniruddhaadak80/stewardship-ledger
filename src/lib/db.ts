@@ -26,6 +26,10 @@ function latestSeal(records: CaseRecord[]): string {
   return latest?.seal.digest ?? GENESIS_SEAL;
 }
 
+function dateValue(value: unknown): string {
+  return value instanceof Date ? value.toISOString() : String(value);
+}
+
 function recordFromRow(row: Record<string, unknown>): CaseRecord {
   const score = typeof row.score_json === "string" ? JSON.parse(row.score_json) : row.score_json;
   const history = typeof row.history === "string" ? JSON.parse(row.history) : row.history;
@@ -42,9 +46,9 @@ function recordFromRow(row: Record<string, unknown>): CaseRecord {
     safeguards: String(row.safeguards),
     owner: String(row.owner),
     status: String(row.status) as CaseStatus,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-    deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+    createdAt: dateValue(row.created_at),
+    updatedAt: dateValue(row.updated_at),
+    deletedAt: row.deleted_at ? dateValue(row.deleted_at) : null,
     version: Number(row.version),
     score: score as CaseRecord["score"],
     seal: typeof row.seal === "string" ? JSON.parse(row.seal) : row.seal,
@@ -142,9 +146,17 @@ export async function createCase(draft: CaseDraft, actor = "public steward"): Pr
 
   if (sql) {
     await ensureDatabaseSeed();
-    const latestRows = (await sql`SELECT seal FROM stewardship_cases ORDER BY created_at DESC LIMIT 1`) as unknown as Array<{ seal: Record<string, unknown> | string }>;
-    const latest = latestRows[0]?.seal;
-    const previousSeal = latest ? (typeof latest === "string" ? JSON.parse(latest).digest : String(latest.digest)) : GENESIS_SEAL;
+    const latestRows = (await sql`SELECT seal FROM stewardship_cases ORDER BY created_at ASC`) as unknown as Array<{ seal: Record<string, unknown> | string }>;
+    const previousSeal = latestRows.reduce((head, row) => {
+      if (typeof row.seal === "string") {
+        try {
+          return String(JSON.parse(row.seal).digest ?? head);
+        } catch {
+          return head;
+        }
+      }
+      return String(row.seal.digest ?? head);
+    }, GENESIS_SEAL);
     const seal = createSeal(fields, score, previousSeal, now);
     const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest };
     await sql`
