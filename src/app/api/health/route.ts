@@ -8,7 +8,8 @@ export async function GET() {
     {
       ok: database.ok,
       service: "stewardship-ledger",
-      version: "1.0.0",
+      version: "1.1.0",
+      features: ["cases", "research-atlas", "sealed-briefs", "mcp"],
       storage: storageMode(),
       database,
       timestamp: new Date().toISOString(),

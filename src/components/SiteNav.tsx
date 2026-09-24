@@ -13,10 +13,12 @@ export function SiteNav() {
           </span>
           <span>
             <strong>Stewardship</strong>
-            <small>Ledger / public casebook</small>
+            <small>Atlas / public casebook</small>
           </span>
         </Link>
         <nav className="nav-links" aria-label="Primary navigation">
+          <Link href="/atlas">Evidence atlas</Link>
+          <Link href="/briefs">Briefs</Link>
           <Link href="/ledger">The ledger</Link>
           <Link href="/method">Method</Link>
           <Link href="/agent">Agent console</Link>

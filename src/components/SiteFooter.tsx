@@ -10,12 +10,15 @@ export function SiteFooter() {
             <span className="footer-glyph"><HeartHandshake size={17} aria-hidden="true" /></span>
             Care before capability
           </div>
-          <p className="footer-note">A public working surface for making powerful systems more answerable to the people they touch.</p>
+           <p className="footer-note">A public evidence atlas and working surface for making powerful systems more answerable to the people they touch.</p>
         </div>
         <div className="footer-links">
+          <Link href="/atlas">Evidence atlas <span>↗</span></Link>
+          <Link href="/briefs">Saved briefs <span>↗</span></Link>
           <Link href="/ledger">Open ledger <span>↗</span></Link>
           <Link href="/api/health">Health <span>↗</span></Link>
-          <Link href="/api/feed">Research feed <span>↗</span></Link>
+           <Link href="/api/feed">Research feed <span>↗</span></Link>
+           <Link href="/api/research">Evidence API <span>↗</span></Link>
           <Link href="/mcp">MCP endpoint <span>↗</span></Link>
         </div>
         <div className="footer-seal">
