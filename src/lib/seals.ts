@@ -42,14 +42,23 @@ export function verifySealChain(records: CaseRecord[]): {
   brokenAt: string | null;
   head: string;
 } {
-  const ordered = [...records].sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+  const revisions = records.flatMap((record) => record.history.map((revision) => ({ record, revision })));
+  const ordered = [...revisions].sort((left, right) => `${left.revision.at}|${left.record.id}|${left.revision.id}`.localeCompare(`${right.revision.at}|${right.record.id}|${right.revision.id}`));
   let previous = GENESIS_SEAL;
 
-  for (const record of ordered) {
-    if (record.seal.previousSeal !== previous || !verifySeal(record)) {
-      return { valid: false, checked: ordered.indexOf(record) + 1, brokenAt: record.id, head: previous };
+  for (let index = 0; index < ordered.length; index += 1) {
+    const current = ordered[index];
+    if (current.revision.previousSeal !== previous) {
+      return { valid: false, checked: index + 1, brokenAt: current.record.id, head: previous };
     }
-    previous = record.seal.digest;
+    previous = current.revision.seal;
+  }
+
+  for (const record of records) {
+    const lastRevision = record.history[record.history.length - 1];
+    if (!verifySeal(record) || !lastRevision || lastRevision.seal !== record.seal.digest) {
+      return { valid: false, checked: ordered.length, brokenAt: record.id, head: previous };
+    }
   }
 
   return { valid: true, checked: ordered.length, brokenAt: null, head: previous };
@@ -68,7 +77,7 @@ export function buildSeedRecord(input: CaseFields, id: string, createdAt: string
     version: 1,
     score,
     seal,
-    history: [{ id: `${id}-v1`, actor: "seed", action: "created", at: createdAt, seal: seal.digest }],
+    history: [{ id: `${id}-v1`, actor: "seed", action: "created", at: createdAt, seal: seal.digest, previousSeal }],
   };
 }
 

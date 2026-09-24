@@ -50,6 +50,7 @@ export type CaseRevision = {
   action: "created" | "updated" | "retired";
   at: string;
   seal: string;
+  previousSeal: string;
 };
 
 export type CaseRecord = CaseFields & {

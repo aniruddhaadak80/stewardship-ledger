@@ -171,7 +171,7 @@ export async function createCase(draft: CaseDraft, actor = "public steward"): Pr
     await ensureDatabaseSeed();
     const previousSeal = await databaseHead(sql);
     const seal = createSeal(fields, score, previousSeal, now);
-    const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest };
+    const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest, previousSeal };
     await sql`
       INSERT INTO stewardship_cases
         (id, title, system, context, autonomy, reversibility, oversight, affected, voice, safeguards, owner, status, created_at, updated_at, deleted_at, version, score_json, seal, history)
@@ -185,7 +185,7 @@ export async function createCase(draft: CaseDraft, actor = "public steward"): Pr
   const records = memoryCases();
   const previousSeal = latestSeal(records);
   const seal = createSeal(fields, score, previousSeal, now);
-  const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest };
+  const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest, previousSeal };
   const record: CaseRecord = { ...fields, id, status, createdAt: now, updatedAt: now, deletedAt: null, version: 1, score, seal, history: [revision] };
   records.unshift(record);
   return structuredClone(record);
@@ -204,7 +204,7 @@ export async function updateCase(id: string, patch: Partial<CaseDraft>, actor = 
   const previousSeal = sql ? await databaseHead(sql) : latestSeal(memoryCases());
   const seal = createSeal(fields, score, previousSeal, now);
   const version = current.version + 1;
-  const revision = { id: `${id}-v${version}`, actor, action: "updated" as const, at: now, seal: seal.digest };
+  const revision = { id: `${id}-v${version}`, actor, action: "updated" as const, at: now, seal: seal.digest, previousSeal };
   const next: CaseRecord = { ...current, ...fields, status, updatedAt: now, version, score, seal, history: [...current.history, revision] };
 
   if (sql) {
@@ -233,7 +233,7 @@ export async function archiveCase(id: string, actor = "public steward"): Promise
   const previousSeal = sql ? await databaseHead(sql) : latestSeal(memoryCases());
   const seal = createSeal(current, score, previousSeal, now);
   const version = current.version + 1;
-  const revision = { id: `${id}-v${version}`, actor, action: "retired" as const, at: now, seal: seal.digest };
+  const revision = { id: `${id}-v${version}`, actor, action: "retired" as const, at: now, seal: seal.digest, previousSeal };
   const next: CaseRecord = { ...current, status: "retired", updatedAt: now, deletedAt: now, version, score, seal, history: [...current.history, revision] };
   if (sql) {
     await sql`
