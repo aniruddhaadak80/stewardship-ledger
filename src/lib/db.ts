@@ -228,10 +228,11 @@ export async function archiveCase(id: string, actor = "public steward"): Promise
     return null;
   }
   const now = new Date().toISOString();
-  const score = evaluateCase(current);
+  const fields = normalizeCase(current);
+  const score = evaluateCase(fields);
   const sql = sqlClient();
   const previousSeal = sql ? await databaseHead(sql) : latestSeal(memoryCases());
-  const seal = createSeal(current, score, previousSeal, now);
+  const seal = createSeal(fields, score, previousSeal, now);
   const version = current.version + 1;
   const revision = { id: `${id}-v${version}`, actor, action: "retired" as const, at: now, seal: seal.digest, previousSeal };
   const next: CaseRecord = { ...current, status: "retired", updatedAt: now, deletedAt: now, version, score, seal, history: [...current.history, revision] };
