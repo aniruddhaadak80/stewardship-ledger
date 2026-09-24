@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS stewardship_cases (
 CREATE INDEX IF NOT EXISTS stewardship_cases_updated_at_idx ON stewardship_cases (updated_at DESC);
 CREATE INDEX IF NOT EXISTS stewardship_cases_status_idx ON stewardship_cases (status);
 
+CREATE TABLE IF NOT EXISTS stewardship_head (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  head TEXT NOT NULL
+);
+
+INSERT INTO stewardship_head (id, head)
+VALUES (1, repeat('0', 96))
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS feed_cache (
   id TEXT PRIMARY KEY,
   payload JSONB NOT NULL,

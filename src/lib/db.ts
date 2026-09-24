@@ -14,6 +14,41 @@ function sqlClient() {
   return url ? neon(url) : null;
 }
 
+type SqlClient = NonNullable<ReturnType<typeof sqlClient>>;
+
+function digestFromSeal(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    try {
+      return String((JSON.parse(value) as Record<string, unknown>).digest ?? fallback);
+    } catch {
+      return fallback;
+    }
+  }
+  if (value && typeof value === "object" && "digest" in value) {
+    return String((value as Record<string, unknown>).digest ?? fallback);
+  }
+  return fallback;
+}
+
+async function ensureDatabaseHead(sql: SqlClient): Promise<void> {
+  const headRows = (await sql`SELECT head FROM stewardship_head WHERE id = 1`) as unknown as Array<{ head: string }>;
+  if (headRows[0]?.head && headRows[0].head !== GENESIS_SEAL) {
+    return;
+  }
+  const caseRows = (await sql`SELECT seal FROM stewardship_cases ORDER BY updated_at ASC`) as unknown as Array<{ seal: unknown }>;
+  const head = caseRows.reduce((current, row) => digestFromSeal(row.seal, current), GENESIS_SEAL);
+  if (headRows[0]?.head === head) {
+    return;
+  }
+  await sql`INSERT INTO stewardship_head (id, head) VALUES (1, ${head}) ON CONFLICT (id) DO UPDATE SET head = EXCLUDED.head`;
+}
+
+async function databaseHead(sql: SqlClient): Promise<string> {
+  await ensureDatabaseHead(sql);
+  const rows = (await sql`SELECT head FROM stewardship_head WHERE id = 1`) as unknown as Array<{ head: string }>;
+  return String(rows[0]?.head ?? GENESIS_SEAL);
+}
+
 function memoryCases(): CaseRecord[] {
   if (!globalStore.__stewardshipCases) {
     globalStore.__stewardshipCases = FALLBACK_CASES.map((record) => structuredClone(record));
@@ -22,7 +57,7 @@ function memoryCases(): CaseRecord[] {
 }
 
 function latestSeal(records: CaseRecord[]): string {
-  const latest = [...records].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  const latest = [...records].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   return latest?.seal.digest ?? GENESIS_SEAL;
 }
 
@@ -64,18 +99,18 @@ async function ensureDatabaseSeed(): Promise<void> {
         return;
       }
       const countRows = (await sql`SELECT COUNT(*)::int AS count FROM stewardship_cases`) as unknown as Array<{ count: number }>;
-      if (Number(countRows[0]?.count ?? 0) > 0) {
-        return;
+      if (Number(countRows[0]?.count ?? 0) === 0) {
+        for (const record of FALLBACK_CASES) {
+          await sql`
+            INSERT INTO stewardship_cases
+              (id, title, system, context, autonomy, reversibility, oversight, affected, voice, safeguards, owner, status, created_at, updated_at, deleted_at, version, score_json, seal, history)
+            VALUES
+              (${record.id}, ${record.title}, ${record.system}, ${record.context}, ${record.autonomy}, ${record.reversibility}, ${record.oversight}, ${record.affected}, ${record.voice}, ${record.safeguards}, ${record.owner}, ${record.status}, ${record.createdAt}, ${record.updatedAt}, ${record.deletedAt}, ${record.version}, ${JSON.stringify(record.score)}::jsonb, ${JSON.stringify(record.seal)}::jsonb, ${JSON.stringify(record.history)}::jsonb)
+            ON CONFLICT (id) DO NOTHING
+          `;
+        }
       }
-      for (const record of FALLBACK_CASES) {
-        await sql`
-          INSERT INTO stewardship_cases
-            (id, title, system, context, autonomy, reversibility, oversight, affected, voice, safeguards, owner, status, created_at, updated_at, deleted_at, version, score_json, seal, history)
-          VALUES
-            (${record.id}, ${record.title}, ${record.system}, ${record.context}, ${record.autonomy}, ${record.reversibility}, ${record.oversight}, ${record.affected}, ${record.voice}, ${record.safeguards}, ${record.owner}, ${record.status}, ${record.createdAt}, ${record.updatedAt}, ${record.deletedAt}, ${record.version}, ${JSON.stringify(record.score)}::jsonb, ${JSON.stringify(record.seal)}::jsonb, ${JSON.stringify(record.history)}::jsonb)
-          ON CONFLICT (id) DO NOTHING
-        `;
-      }
+      await ensureDatabaseHead(sql);
     })();
   }
   try {
@@ -146,17 +181,7 @@ export async function createCase(draft: CaseDraft, actor = "public steward"): Pr
 
   if (sql) {
     await ensureDatabaseSeed();
-    const latestRows = (await sql`SELECT seal FROM stewardship_cases ORDER BY created_at ASC`) as unknown as Array<{ seal: Record<string, unknown> | string }>;
-    const previousSeal = latestRows.reduce((head, row) => {
-      if (typeof row.seal === "string") {
-        try {
-          return String(JSON.parse(row.seal).digest ?? head);
-        } catch {
-          return head;
-        }
-      }
-      return String(row.seal.digest ?? head);
-    }, GENESIS_SEAL);
+    const previousSeal = await databaseHead(sql);
     const seal = createSeal(fields, score, previousSeal, now);
     const revision = { id: `${id}-v1`, actor, action: "created" as const, at: now, seal: seal.digest };
     await sql`
@@ -165,6 +190,7 @@ export async function createCase(draft: CaseDraft, actor = "public steward"): Pr
       VALUES
         (${id}, ${fields.title}, ${fields.system}, ${fields.context}, ${fields.autonomy}, ${fields.reversibility}, ${fields.oversight}, ${fields.affected}, ${fields.voice}, ${fields.safeguards}, ${fields.owner}, ${status}, ${now}, ${now}, NULL, 1, ${JSON.stringify(score)}::jsonb, ${JSON.stringify(seal)}::jsonb, ${JSON.stringify([revision])}::jsonb)
     `;
+    await sql`UPDATE stewardship_head SET head = ${seal.digest} WHERE id = 1`;
     return { ...fields, id, status, createdAt: now, updatedAt: now, deletedAt: null, version: 1, score, seal, history: [revision] };
   }
 
@@ -186,11 +212,12 @@ export async function updateCase(id: string, patch: Partial<CaseDraft>, actor = 
   const status = patch.status ? normalizeStatus(patch.status) : current.status;
   const now = new Date().toISOString();
   const score = evaluateCase(fields);
-  const seal = createSeal(fields, score, current.seal.digest, now);
+  const sql = sqlClient();
+  const previousSeal = sql ? await databaseHead(sql) : latestSeal(memoryCases());
+  const seal = createSeal(fields, score, previousSeal, now);
   const version = current.version + 1;
   const revision = { id: `${id}-v${version}`, actor, action: "updated" as const, at: now, seal: seal.digest };
   const next: CaseRecord = { ...current, ...fields, status, updatedAt: now, version, score, seal, history: [...current.history, revision] };
-  const sql = sqlClient();
 
   if (sql) {
     await sql`
@@ -198,6 +225,7 @@ export async function updateCase(id: string, patch: Partial<CaseDraft>, actor = 
       SET title = ${fields.title}, system = ${fields.system}, context = ${fields.context}, autonomy = ${fields.autonomy}, reversibility = ${fields.reversibility}, oversight = ${fields.oversight}, affected = ${fields.affected}, voice = ${fields.voice}, safeguards = ${fields.safeguards}, owner = ${fields.owner}, status = ${status}, updated_at = ${now}, version = ${version}, score_json = ${JSON.stringify(score)}::jsonb, seal = ${JSON.stringify(seal)}::jsonb, history = ${JSON.stringify(next.history)}::jsonb
       WHERE id = ${id}
     `;
+    await sql`UPDATE stewardship_head SET head = ${seal.digest} WHERE id = 1`;
   } else {
     const records = memoryCases();
     const index = records.findIndex((record) => record.id === id);
@@ -213,17 +241,19 @@ export async function archiveCase(id: string, actor = "public steward"): Promise
   }
   const now = new Date().toISOString();
   const score = evaluateCase(current);
-  const seal = createSeal(current, score, current.seal.digest, now);
+  const sql = sqlClient();
+  const previousSeal = sql ? await databaseHead(sql) : latestSeal(memoryCases());
+  const seal = createSeal(current, score, previousSeal, now);
   const version = current.version + 1;
   const revision = { id: `${id}-v${version}`, actor, action: "retired" as const, at: now, seal: seal.digest };
   const next: CaseRecord = { ...current, status: "retired", updatedAt: now, deletedAt: now, version, score, seal, history: [...current.history, revision] };
-  const sql = sqlClient();
   if (sql) {
     await sql`
       UPDATE stewardship_cases
       SET status = 'retired', deleted_at = ${now}, updated_at = ${now}, version = ${version}, score_json = ${JSON.stringify(score)}::jsonb, seal = ${JSON.stringify(seal)}::jsonb, history = ${JSON.stringify(next.history)}::jsonb
       WHERE id = ${id}
     `;
+    await sql`UPDATE stewardship_head SET head = ${seal.digest} WHERE id = 1`;
   } else {
     const records = memoryCases();
     const index = records.findIndex((record) => record.id === id);

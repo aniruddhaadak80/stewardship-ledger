@@ -42,7 +42,7 @@ export function verifySealChain(records: CaseRecord[]): {
   brokenAt: string | null;
   head: string;
 } {
-  const ordered = [...records].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const ordered = [...records].sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
   let previous = GENESIS_SEAL;
 
   for (const record of ordered) {
