@@ -30,23 +30,11 @@ function digestFromSeal(value: unknown, fallback: string): string {
   return fallback;
 }
 
-async function ensureDatabaseHead(sql: SqlClient): Promise<void> {
-  const headRows = (await sql`SELECT head FROM stewardship_head WHERE id = 1`) as unknown as Array<{ head: string }>;
-  if (headRows[0]?.head && headRows[0].head !== GENESIS_SEAL) {
-    return;
-  }
+async function databaseHead(sql: SqlClient): Promise<string> {
   const caseRows = (await sql`SELECT seal FROM stewardship_cases ORDER BY updated_at ASC`) as unknown as Array<{ seal: unknown }>;
   const head = caseRows.reduce((current, row) => digestFromSeal(row.seal, current), GENESIS_SEAL);
-  if (headRows[0]?.head === head) {
-    return;
-  }
   await sql`INSERT INTO stewardship_head (id, head) VALUES (1, ${head}) ON CONFLICT (id) DO UPDATE SET head = EXCLUDED.head`;
-}
-
-async function databaseHead(sql: SqlClient): Promise<string> {
-  await ensureDatabaseHead(sql);
-  const rows = (await sql`SELECT head FROM stewardship_head WHERE id = 1`) as unknown as Array<{ head: string }>;
-  return String(rows[0]?.head ?? GENESIS_SEAL);
+  return head;
 }
 
 function memoryCases(): CaseRecord[] {
@@ -110,7 +98,7 @@ async function ensureDatabaseSeed(): Promise<void> {
           `;
         }
       }
-      await ensureDatabaseHead(sql);
+      await databaseHead(sql);
     })();
   }
   try {
