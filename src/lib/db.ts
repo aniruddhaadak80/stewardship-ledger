@@ -111,9 +111,9 @@ export async function listCases(options: { query?: string; status?: string; incl
   const status = options.status || null;
   const rows = (await sql`
     SELECT * FROM stewardship_cases
-    WHERE (${query} IS NULL OR title ILIKE '%' || ${query} || '%' OR system ILIKE '%' || ${query} || '%' OR context ILIKE '%' || ${query} || '%' OR owner ILIKE '%' || ${query} || '%')
-      AND (${status} IS NULL OR status = ${status})
-      AND (${options.includeDeleted ? true : false} OR deleted_at IS NULL)
+    WHERE (${query}::text IS NULL OR title ILIKE '%' || ${query}::text || '%' OR system ILIKE '%' || ${query}::text || '%' OR context ILIKE '%' || ${query}::text || '%' OR owner ILIKE '%' || ${query}::text || '%')
+      AND (${status}::text IS NULL OR status = ${status}::text)
+      AND (${options.includeDeleted ? true : false}::boolean OR deleted_at IS NULL)
     ORDER BY updated_at DESC
   `) as unknown as Array<Record<string, unknown>>;
   return rows.map(recordFromRow);
