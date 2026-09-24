@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "stewardship-ledger": {
+      "transport": "streamable-http",
+      "url": "https://stewardship-ledger.vercel.app/mcp",
+      "description": "Read, score, create, update, retire, and verify public AI stewardship cases."
+    }
+  }
+}
