@@ -23,13 +23,18 @@ function dateValue(value: unknown): string {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function sourceDigest(source: Omit<ResearchSource, "sourceHash">): string {
+function sourceDigest(source: Omit<ResearchSource, "sourceHash" | "fetchedAt">): string {
   return createHash("sha256").update(canonicalJson(source)).digest("hex");
 }
 
-function normalizedSource(source: ResearchSource): ResearchSource {
-  const content = Object.fromEntries(Object.entries(source).filter(([key]) => key !== "sourceHash")) as Omit<ResearchSource, "sourceHash">;
-  return { ...content, sourceHash: sourceDigest(content) };
+export function normalizedSource(source: ResearchSource): ResearchSource {
+  // `fetchedAt` is a "when did we last fetch this" stamp, not part of the
+  // record's content, so it must not take part in the fingerprint. Otherwise
+  // every refresh produces a new hash for an unchanged source.
+  const content = Object.fromEntries(
+    Object.entries(source).filter(([key]) => key !== "sourceHash" && key !== "fetchedAt")
+  ) as Omit<ResearchSource, "sourceHash" | "fetchedAt">;
+  return { ...content, fetchedAt: source.fetchedAt, sourceHash: sourceDigest(content) };
 }
 
 function memorySources(): ResearchSource[] {
@@ -152,9 +157,12 @@ function briefContent(brief: AlignmentBrief | BriefRecord): AlignmentBrief {
   };
 }
 
-export async function previewBrief(sourceIds: string[] = [], question?: string, title?: string): Promise<AlignmentBrief> {
+export async function previewBrief(sourceIds?: string[], question?: string, title?: string): Promise<AlignmentBrief> {
   const all = await listResearchSources();
-  const selected = sourceIds.length ? all.filter((source) => sourceIds.includes(source.id)) : all;
+  // An explicit selection is always honoured, even when it is empty: an empty
+  // array means "no sources", not "every source". Only an omitted selection
+  // falls back to the whole catalog.
+  const selected = sourceIds === undefined ? all : all.filter((source) => sourceIds.includes(source.id));
   return buildAlignmentBrief(selected, question, title);
 }
 

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "./canonical";
 import { CURATED_COMMENTARY, CURATED_SOURCES } from "./research-catalog";
 import type { ResearchFeedResponse, ResearchSource, SourceStance } from "./types";
 
@@ -20,13 +21,13 @@ function stableId(prefix: string, value: string): string {
   return `${prefix}-${digest}`;
 }
 
-function sourceHash(value: Omit<ResearchSource, "sourceHash">): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+function sourceHash(value: Omit<ResearchSource, "sourceHash" | "fetchedAt">): string {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
 function makeSource(value: Omit<ResearchSource, "sourceHash" | "isLive" | "fetchedAt">): ResearchSource {
-  const base = { ...value, isLive: true, fetchedAt: new Date().toISOString() };
-  return { ...base, sourceHash: sourceHash(base) };
+  const { fetchedAt, ...content } = { ...value, isLive: true, fetchedAt: new Date().toISOString() };
+  return { ...content, fetchedAt, sourceHash: sourceHash(content) };
 }
 
 function arxivSources(xml: string): ResearchSource[] {

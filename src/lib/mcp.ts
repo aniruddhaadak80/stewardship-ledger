@@ -213,10 +213,10 @@ export async function handleMcpRequest(payload: unknown): Promise<Record<string,
       return { jsonrpc: "2.0", id, result: toolResult(await refreshResearchSources()) };
     }
     if (name === "preview_brief") {
-      return { jsonrpc: "2.0", id, result: toolResult(await previewBrief(sourceIds ?? [], stringValue(args.question), stringValue(args.title))) };
+      return { jsonrpc: "2.0", id, result: toolResult(await previewBrief(sourceIds, stringValue(args.question), stringValue(args.title))) };
     }
     if (name === "save_brief") {
-      return { jsonrpc: "2.0", id, result: toolResult(await createBrief({ sourceIds: sourceIds ?? [], question: stringValue(args.question), title: stringValue(args.title), caseId: stringValue(args.caseId) ?? null })) };
+      return { jsonrpc: "2.0", id, result: toolResult(await createBrief({ sourceIds, question: stringValue(args.question), title: stringValue(args.title), caseId: stringValue(args.caseId) ?? null })) };
     }
     if (name === "list_briefs") {
       return { jsonrpc: "2.0", id, result: toolResult(await listBriefs()) };
