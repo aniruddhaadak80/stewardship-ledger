@@ -15,7 +15,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const payload = objectValue(await readJson(request));
-    const sourceIds = Array.isArray(payload.sourceIds) ? payload.sourceIds.filter((value): value is string => typeof value === "string") : [];
+    const sourceIds = Array.isArray(payload.sourceIds) ? payload.sourceIds.filter((value): value is string => typeof value === "string") : undefined;
     const brief = await createBrief({ sourceIds, question: typeof payload.question === "string" ? payload.question : undefined, title: typeof payload.title === "string" ? payload.title : undefined, caseId: typeof payload.caseId === "string" ? payload.caseId : null });
     return Response.json({ brief }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
